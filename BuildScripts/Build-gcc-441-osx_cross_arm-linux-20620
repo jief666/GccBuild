@@ -1,0 +1,693 @@
+#!/bin/bash
+
+# Do not define var in this script. Define tham all in SetupEnv-$BUILDGCC_SUFFIX.
+# The goal is to be able to copy and paste command from this script to a console. Helped me a lot when debugging step by step
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+  echo BUILDGCC_BUILD_DIR not defined
+  exit 1
+fi
+
+#[ -z "$BUILDGCC_SYSTEM_HEADER_DIR"  -a  -d "/JiefLand/5.Devel" ] && export BUILDGCC_SYSTEM_HEADER_DIR=/JiefLand/5.Devel/SqueezeBox/ShairportSyncWorkspace/poky_ubuntu10/build/tmp-jive/staging/armv5te-none-linux-gnueabi/usr/include
+#[ -z "$BUILDGCC_SYSTEM_HEADER_DIR"  -a  -d "/Volumes/5.Devel" ] && export BUILDGCC_SYSTEM_HEADER_DIR=/Volumes/5.Devel/SqueezeBox/ShairportSyncWorkspace/poky_ubuntu10/build/tmp-jive/staging/armv5te-none-linux-gnueabi/usr/include
+#if [ -z "$BUILDGCC_SYSTEM_HEADER_DIR" ]
+#then
+#  echo Please define BUILDGCC_SYSTEM_HEADER_DIR to the path of target system includes.
+#  exit 1
+#fi
+
+
+# ulimit maybe not needed.
+ulimit -n 1024
+set -u -o pipefail
+
+#If every component are already sucessfully built, "$BUILDGCC_BUILD_DIR"/make_sucessfully.done will be recreated immediately.
+[ -f "$BUILDGCC_BUILD_DIR"/make_sucessfully.done ] && rm "$BUILDGCC_BUILD_DIR"/make_sucessfully.done
+
+mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM
+mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr
+# on Lion, we must specify destination name ('include') even if it's the same
+[[ ! -L "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr/include ]] && ln -s ../include/ "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr/include
+
+"$BUILDGCC_BUILDSCRIPTS"/Extract "include_poky-v7.7" $TARGET_PLATFORM include || exit 1
+
+
+
+echo *-*-*-*------------------------------------------------------------------ GMP ------------------------------------------------------------------------
+
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]; then
+    
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$GMP_SOURCES_DIR" || exit 1
+    
+    rm -rf "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+    
+    #--disable-assembly <- needed for isl
+    
+
+    
+    #had to put flags in CC (instead of CFLAGS) variable so they are used when configure do the "check how to run preprocessor"
+    ../$GMP_SOURCES_DIR/configure CPPFLAGS="-fexceptions" \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --enable-cxx \
+      --disable-shared \
+      --disable-assembly \
+      --with-pic \
+      2>&1 | tee configure-stdout.log
+    
+    if [[ $? == 0 ]] && [[ -f config.status ]]; then
+        sed -i '59s|ANSI2KNR =|ANSI2KNR = ./ansi2knr|' Makefile
+        [[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+    
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GMP failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ MPFR ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build/make_sucessfully.done ]]; then
+    
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$MPFR_SOURCES_DIR" || exit 1
+    
+    rm -rf "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build
+    
+    ../$MPFR_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --with-gmp="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --disable-shared \
+        2>&1 | tee configure-stdout.log
+    
+    # --enable-shared \ <- error illegal text-relocation to '___gmp_binvert_limb_table'
+    #--disable-assembly \ <- not recognized
+      
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ MPFR failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ MPC ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build/make_sucessfully.done ]]; then
+    
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$MPC_SOURCES_DIR" || exit 1
+    
+    rm -rf "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build
+    
+    ../$MPC_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --disable-shared \
+      --with-gmp="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --with-mpfr="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+        2>&1 | tee configure-stdout.log
+    
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ MPC failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ PPL ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/make_sucessfully.done ]]; then
+    
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$PPL_SOURCES_DIR" || exit 1
+
+    rm -rf "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build
+    
+
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/configure "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/configure.origin
+    sed '16905s/assuming not/assuming yes/' "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/configure.origin \
+      |   sed 's/ -W -Wall//g' \
+      |   sed '16906s/ac_cv_gmp_supports_exceptions=no/ac_cv_gmp_supports_exceptions=yes/' >"$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/configure
+    
+    #  --with-libgmp-prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+    #  --with-libgmpxx-prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+    
+    #cp -n "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/Makefile "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/Makefile.origin
+    #sed '136s|-W -Wall|-w|'  "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/Makefile.origin |   sed '145s|-W -Wall|-w|'  >"$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/Makefile
+    
+    #cp -n "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/src/Makefile "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/src/Makefile.origin
+    #sed '326s|-W -Wall|-w|' "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/src/Makefile.origin \
+    #    | sed '335s|-W -Wall|-w -fpermissive|' \
+    #      >"$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/src/Makefile
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.inlines.hh "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.inlines.hh.orig
+    
+patch -o "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.inlines.hh "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.inlines.hh.orig <<"END_OF_PATCH"
+--- Interval.inlines.hh    2016-11-25 11:45:20.000000000 +0100
++++ Interval.inlines.hh.new    2016-11-25 11:47:11.000000000 +0100
+@@ -80,18 +80,18 @@
+   return x.info();
+ }
+ 
+-struct Scalar_As_Interval_Policy {
+-  const_bool_nodef(may_be_empty, true);
+-  const_bool_nodef(may_contain_infinity, true);
+-  const_bool_nodef(check_empty_result, false);
+-  const_bool_nodef(check_inexact, false);
+-};
++//struct Scalar_As_Interval_Policy {
++//  const_bool_nodef(may_be_empty, true);
++//  const_bool_nodef(may_contain_infinity, true);
++//  const_bool_nodef(check_empty_result, false);
++//  const_bool_nodef(check_inexact, false);
++//};
+ 
+-typedef Interval_Restriction_None<Interval_Info_Null<Scalar_As_Interval_Policy> > Scalar_As_Interval_Info;
++//typedef Interval_Restriction_None<Interval_Info_Null<Scalar_As_Interval_Policy> > Scalar_As_Interval_Info;
+ 
+ const Scalar_As_Interval_Info SCALAR_INFO;
+ 
+-typedef Interval_Restriction_None<Interval_Info_Null_Open<Scalar_As_Interval_Policy> > Scalar_As_Interval_Info_Open;
++//typedef Interval_Restriction_None<Interval_Info_Null_Open<Scalar_As_Interval_Policy> > Scalar_As_Interval_Info_Open;
+ 
+ template <typename T>
+ inline typename Enable_If<Is_Singleton<T>::value, const T&>::type
+@@ -108,11 +108,11 @@
+ f_info(const T&) {
+   return SCALAR_INFO;
+ }
+-template <typename T>
+-inline typename Enable_If<Is_Singleton<T>::value, Scalar_As_Interval_Info_Open>::type
+-f_info(const T&, bool open) {
+-  return Scalar_As_Interval_Info_Open(open);
+-}
++//template <typename T>
++//inline typename Enable_If<Is_Singleton<T>::value, Scalar_As_Interval_Info_Open>::type
++//f_info(const T&, bool open) {
++//  return Scalar_As_Interval_Info_Open(open);
++//}
+ 
+ template <typename T>
+ inline typename Enable_If<Is_Singleton<T>::value, bool>::type
+END_OF_PATCH
+    
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.defs.hh "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.defs.hh.orig
+    
+patch -o "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.defs.hh "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR/src/Interval.defs.hh.orig <<"END_OF_PATCH"
+--- Interval.defs.hh    2016-11-25 12:12:31.000000000 +0100
++++ Interval.defs.hh.new    2016-11-25 12:12:31.000000000 +0100
+@@ -84,6 +84,22 @@
+ template <typename T>
+ struct Is_Interval : public Is_Same_Or_Derived<Interval_Base, T> {};
+ 
++namespace Interval_NS { 
++struct Scalar_As_Interval_Policy { 
++  const_bool_nodef(may_be_empty, true); 
++  const_bool_nodef(may_contain_infinity, true); 
++  const_bool_nodef(check_empty_result, false); 
++  const_bool_nodef(check_inexact, false); 
++}; 
++typedef Interval_Restriction_None<Interval_Info_Null<Scalar_As_Interval_Policy> > Scalar_As_Interval_Info; 
++typedef Interval_Restriction_None<Interval_Info_Null_Open<Scalar_As_Interval_Policy> > Scalar_As_Interval_Info_Open; 
++template <typename T> 
++inline typename Enable_If<Is_Singleton<T>::value, Scalar_As_Interval_Info_Open>::type 
++f_info(const T&, bool open) { 
++  return Scalar_As_Interval_Info_Open(open); 
++} 
++} 
++
+ //! A generic, not necessarily closed, possibly restricted interval.
+ /*! \ingroup PPL_CXX_interface
+   The class template type parameter \p Boundary represents the type
+END_OF_PATCH
+    
+
+    
+    ../$PPL_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --disable-shared \
+        2>&1 | tee configure-stdout.log
+    
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ PPL failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ Cloog ------------------------------------------------------------------------
+    
+if [[ -f "$BUILDGCC_BUILD_DIR"/$PPL_SOURCES_DIR-build/make_sucessfully.done &&  ! -f "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build/make_sucessfully.done ]]; then
+
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$CLOOG_SOURCES_DIR" || exit 1
+
+    rm -rf "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build
+    
+    ../$CLOOG_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --disable-shared \
+      --with-gmp="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --with-ppl="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+        2>&1 | tee configure-stdout.log
+    
+    if [[ -f config.status ]]; then
+        cp -n "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build/Makefile "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build/Makefile.origin
+        sed '129s|--mode=link $(CCLD)|--mode=link g++|'  "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build/Makefile.origin   >"$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build/Makefile
+    
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ Cloog failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ BINUTILS ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$CLOOG_SOURCES_DIR-build/make_sucessfully.done  &&  ! -f "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR-build/make_sucessfully.done ]]; then
+
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$BINUTILS_SOURCES_DIR" || exit 1
+    
+    rm -rf "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR-build
+    
+    #We don't want hard link because path to libraries, starting with @loader_path, would point to different places. 
+    cp -n "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/binutils/Makefile.in "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/binutils/Makefile.in.origin
+    sed '1191s|ln $(DESTDIR)$(bindir)/|cp $(DESTDIR)$(bindir)/|' "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/binutils/Makefile.in.origin > "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/binutils/Makefile.in
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/gas/Makefile.in "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/gas/Makefile.in.origin
+    sed '2728s|ln $(DESTDIR)$(bindir)/|cp $(DESTDIR)$(bindir)/|' "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/gas/Makefile.in.origin > "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/gas/Makefile.in
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/ld/Makefile.in "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/ld/Makefile.in.origin
+    sed '2709s|ln $(DESTDIR)$(bindir)/|cp $(DESTDIR)$(bindir)/|' "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/ld/Makefile.in.origin > "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR/ld/Makefile.in
+    
+
+    
+    ../$BINUTILS_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+         --disable-werror \
+         --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+         --target=$TARGET_PLATFORM \
+         --with-sysroot \
+         --disable-multilib \
+         --enable-poison-system-directories \
+           2>&1 | tee configure-stdout.log
+    
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        if [[ $? == 0 ]]
+        then
+            echo "update_all_lib_path"
+            update_all_lib_path "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM
+            [[ $? == 0 ]] && touch make_sucessfully.done
+        fi
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ BINUTILS failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ GCC cross1 ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$BINUTILS_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross1-build/make_sucessfully.done ]]; then
+    
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$GCC_SOURCES_DIR" || exit 1
+    
+    #to avoid : checking for shl_load... configure: error: Link tests are not allowed after GCC_NO_EXECUTABLES.
+    #./$GCC_SOURCES_DIR/libtool.m4
+    #  delete line 5279 (LT_SYS_DLOPEN_SELF)
+    
+    #./$GCC_SOURCES_DIR/gcc/cp/Make-lang.in
+    #  line 73 :
+    #    CXX_C_OBJS = attribs.o c-common.o c-format.o c-pragma.o c-semantics.o c-lex.o \
+    #    c-dump.o $(CXX_TARGET_OBJS) c-pretty-print.o c-opts.o c-pch.o \
+    #    incpath.o cppdefault.o c-ppoutput.o c-cppbuiltin.o prefix.o \
+    #    c-gimplify.o c-omp.o tree-inline.o
+    #      -> remove cppdefault.o & tree-inline.o
+    
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/Makefile.in "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/Makefile.in.origin
+    sed '1645s|$(CC)|g++|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/Makefile.in.origin | sed '1654s|$(CC)|g++|'  > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/Makefile.in
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/cp/Make-lang.in "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/cp/Make-lang.in.origin
+    sed '95s|$(CC)|g++|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/cp/Make-lang.in.origin | sed '104s|$(CC)|g++|' |  sed '75s/cppdefault.o//'  |  sed '76s/tree-inline.o//' > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/cp/Make-lang.in
+    
+#    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/function.h "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/function.h.origin
+#    sed '140s|typedef struct call_site_record \*call_site_record;|typedef struct call_site_record_d \*call_site_record;|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/function.h.origin \
+#        | sed '178s|struct call_site_record;|struct call_site_record_d;|' \
+#        | sed '182s|struct ipa_opt_pass;|struct ipa_opt_pass_d;|' \
+#        | sed '183s|typedef struct ipa_opt_pass \*ipa_opt_pass;|typedef struct ipa_opt_pass_d \*ipa_opt_pass;|' \
+#        > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/function.h
+
+#    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/except.c "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/except.c.origin
+#    sed '3194s|  call_site_record record;|  struct call_site_record\* record;|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/except.c.origin \
+#        > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/except.c
+    
+    #Doc
+    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/cppopts.texi "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/cppopts.texi.origin
+    sed 's|@itemx --help|@item --help|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/cppopts.texi.origin > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/cppopts.texi
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/gcc.texi "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/gcc.texi.origin
+    sed 's|@tab General: @tex press@@gnu.org @end tex|@tab Orders:  @email{press@@gnu.org}|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/gcc.texi.origin \
+        | sed 's|@tab Orders:  @tex sales@@gnu.org @end tex|@tab Orders:  @email{sales@@gnu.org}|' \
+           > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/gcc.texi
+           
+    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/invoke.texi "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/invoke.texi.origin
+    sed 's|@itemx -fdump-rtl-cprop_hardreg|@item -fdump-rtl-cprop_hardreg|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/invoke.texi.origin \
+        | sed 's|@itemx -fdump-rtl-csa|@item -fdump-rtl-csa|' \
+        | sed 's|@itemx -fdump-rtl-dce|@item -fdump-rtl-dce|' \
+        | sed 's|@itemx -fdump-rtl-dbr|@item -fdump-rtl-dbr|' \
+        | sed 's|@itemx -fdump-rtl-into_cfglayout|@item -fdump-rtl-into_cfglayout|' \
+        | sed 's|@itemx -fdump-rtl-outof_cfglayout|@item -fdump-rtl-outof_cfglayout|' \
+        | sed 's|@itemx -fdump-rtl-pro_and_epilogue|@item -fdump-rtl-pro_and_epilogue|' \
+        > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/invoke.texi
+           
+    cp -n "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/c-tree.texi "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/c-tree.texi.origin
+    sed 's|@itemx POINTER_PLUS_EXPR|@item POINTER_PLUS_EXPR|' "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/c-tree.texi.origin \
+        | sed 's|@itemx PLUS_EXPR|@item PLUS_EXPR|' \
+        > "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR/gcc/doc/c-tree.texi
+
+    
+    # --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' \
+    # --with-specs='%{funwind-tables|fno-unwind-tables|mabi=*|ffreestanding|nostdlib:;:-funwind-tables} %{O2:%{!fno-remove-local-statics: -fremove-local-statics}} %{O*:%{O|O0|O1|O2|Os:;:%{!fno-remove-local-statics: -fremove-local-statics}}}' \
+    
+    
+    rm -rf "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross1-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross1-build
+    cd "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross1-build 
+    
+
+    
+    #--disable-threads -> to enable thread, pthread.h is needed.
+
+    ../$GCC_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+     --target=$TARGET_PLATFORM \
+     --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+     --enable-languages=c  \
+     --enable-werror=no \
+     --disable-threads \
+     --disable-multilib \
+     --disable-libmudflap \
+     --disable-libssp \
+     --disable-libatomic \
+     --disable-libitm \
+     --disable-libquadmath \
+     --disable-libsanitizer \
+     --disable-libvtv \
+     --disable-libcilkrts \
+     --disable-libstdcxx \
+     --disable-libstdcxx-pch \
+     --disable-libgomp \
+     --disable-shared \
+     --disable-lto \
+     --disable-nls \
+     --without-ppl \
+     --without-cloog \
+     --enable-poison-system-directories \
+     --with-gmp="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-mpfr="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-mpc="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-ppl="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-cloog="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --without-headers \
+        2>&1 | tee configure-stdout.log
+    
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS all-gcc 2>&1 | tee make-all-gcc-stdout.log
+        [[ $? == 0 ]] && make install-gcc 2>&1 | tee make-install-gcc-stdout.log    
+        [[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS all-target-libgcc 2>&1 | tee make-all-target-libgcc-stdout.log
+        [[ $? == 0 ]] && make install-target-libgcc  2>&1 | tee make-install-target-libgcc-stdout.log  # this install crtbegin.o etc.
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross1-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GCC cross1 failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ GLIBC Headers ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross1-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-headers-build/make_sucessfully.done ]]; then
+    
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$GLIBC_SOURCES_DIR" || exit 1
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$GLIBC_PORTS_SOURCES_DIR" $GLIBC_SOURCES_DIR || exit 1
+    
+    rm -rf "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-headers-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-headers-build
+    cd "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-headers-build
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure.origin
+    sed "6401s|readelf|"$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-readelf|" "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure.origin \
+      | sed "6701s|readelf|"$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-readelf|" \
+      | sed "5298s|GNU sed version|sed (GNU sed)|" \
+      >"$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure
+
+    ../$GLIBC_SOURCES_DIR/configure \
+      BUILD_CC=gcc \
+      CC="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-gcc \
+      CXX="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-g++ \
+      AR="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-ar \
+      RANLIB="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-ranlib \
+      READELF="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-readelf \
+      --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+      --host=$TARGET_PLATFORM \
+      --exec-prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+      --with-binutils="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM/bin \
+      --with-headers="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr/include \
+      --disable-shared \
+      libc_cv_ssp=yes \
+      libc_cv_predef_stack_protector=no \
+      libc_cv_z_relro=yes \
+      libc_cv_forced_unwind=yes          \
+      libc_cv_c_cleanup=yes \
+        2>&1 | tee configure-stdout.log
+    
+    if [[ -f config.status ]]; then
+        make -k install-headers 2>&1 | tee make-install-headers-stdout.log
+        #[[ $? == 0 ]] && ln -sf ../$TARGET_PLATFORM/sys-include/linux/ "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/include/linux
+        #[[ $? == 0 ]] && ln -sf ../$TARGET_PLATFORM/sys-include/asm/ "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/include/asm
+        #[[ $? == 0 ]] && ln -sf ../$TARGET_PLATFORM/sys-include/asm-generic/ "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/include/asm-generic
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-headers-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GLIBC Headers failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ GLIBC ------------------------------------------------------------------------
+    
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-headers-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-build/make_sucessfully.done ]]; then
+
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$GLIBC_SOURCES_DIR" || exit 1
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$GLIBC_PORTS_SOURCES_DIR" $GLIBC_SOURCES_DIR || exit 1
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure.origin
+    sed "6401s|readelf|"$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-readelf|" "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure.origin \
+      | sed "6701s|readelf|"$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-readelf|" \
+      | sed "5298s|GNU sed version|sed (GNU sed)|" \
+      >"$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/configure
+    
+    #https://sourceware.org/git/?p=glibc.git;a=blobdiff;f=Makeconfig;h=859b588e00fcf884323b2113083b507f02f3345b;hp=417fa508a6458edfa98c2caf23fe124e436b42e8;hb=95f5a9a866695da4e038aa4e6ccbbfd5d9cf63b7;hpb=7a845b2c237434d4aad790aaba3a973e24ea802f
+    cp -n "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/Makeconfig "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/Makeconfig.origin
+    sed "426s|+link = |+link-before-libc = |" "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/Makeconfig.origin \
+      | sed '435s|$(link-extra-libs) $(link-libc) $(+postctor) $(+postinit)|$(link-extra-libs)|' \
+      | sed '436i+link-after-libc = $(+postctor) $(+postinit)' \
+      | sed '437i+link = $(+link-before-libc) $(link-libc) $(+link-after-libc)' \
+      | sed '438i+link-tests = $(+link-before-libc) $(link-libc-tests) $(+link-after-libc)' \
+      | sed '455s/+link-static = /+link-static-before-libc = /' \
+      | sed '463s/$(link-extra-libs-static) $(link-libc-static) $(+postctor) $(+postinit)/$(link-extra-libs-static) $(link-libc-static)/' \
+      | sed '464i+link-static-after-libc = $(+postctor) $(+postinit)' \
+      | sed '465i+link-static = $(+link-static-before-libc) $(link-libc-static) \\' \
+      | sed '466i\               $(+link-static-after-libc)' \
+      | sed '467i+link-static-tests = $(+link-static-before-libc) $(link-libc-static-tests) \\' \
+      | sed '468i\                     $(+link-static-after-libc)' \
+      | sed '493s/link-libc = /link-libc-before-gnulib = /' \
+      | sed '495s/$(common-objpfx)$(patsubst %,$(libtype.oS),c) $(gnulib)/$(common-objpfx)$(patsubst %,$(libtype.oS),c)/' \
+      | sed '496ilink-libc = $(link-libc-before-gnulib) $(gnulib)' \
+      | sed '497ilink-libc-tests = $(link-libc-before-gnulib) $(gnulib-tests)' \
+      | sed '508ilink-libc-tests = $(common-objpfx)libc.a $(otherlibs) $(gnulib-tests) $(common-objpfx)libc.a $(gnulib-tests)' \
+      | sed '543ilink-libc-static-tests = $(common-objpfx)libc.a $(static-gnulib-tests)' \
+      | sed '557ignulib-arch =' \
+      | sed '558s/gnulib := -lgcc $(libgcc_eh)/gnulib = -lgcc $(gnulib-arch)/' \
+      | sed '559ignulib-tests := -lgcc $(libgcc_eh)' \
+      | sed '560istatic-gnulib-arch =' \
+      | sed '561s/static-gnulib := -lgcc -lgcc_eh $(libunwind)/static-gnulib = -lgcc $(static-gnulib-arch)/' \
+      | sed '562istatic-gnulib-tests := -lgcc -lgcc_eh $(libunwind)' \
+      >"$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/Makeconfig
+    
+    
+    cp -n "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/manual/Makefile "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/manual/Makefile.orig
+    sed '235s|$(objpfx)stubs ../po/manual.pot $(objpfx)stamp%:|$(objpfx)stubs ../po/manual.pot:|' "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/manual/Makefile.orig \
+      | sed '238i$(objpfx)stamp%:' \
+      | sed "239i\\\t\$(make-target-directory)" \
+      | sed "240i\\\ttouch \$\@" \
+      >"$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR/manual/Makefile
+    
+    rm -rf "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-build 
+        
+    ../$GLIBC_SOURCES_DIR/configure \
+      BUILD_CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CC="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-gcc \
+      CXX="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-g++ \
+      AR="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-ar \
+      RANLIB="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-ranlib \
+      READELF="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin/$TARGET_PLATFORM-readelf \
+      --prefix= \
+      --build=$(../$GLIBC_SOURCES_DIR/scripts/config.guess) \
+      --host=$TARGET_PLATFORM \
+      --with-headers="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr/include \
+      --with-binutils="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/bin \
+      --disable-multilib \
+      --enable-add-ons \
+      --enable-shared \
+      libc_cv_forced_unwind=yes \
+      libc_cv_c_cleanup=yes \
+        2>&1 | tee configure-stdout.log
+    
+    
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        [[ $? == 0 ]] && make install_root="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+    
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GLIBC failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ GCC cross 2 ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GLIBC_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross2-build/make_sucessfully.done ]]; then
+    
+    #Source must have been extracted and pacthed in GCC cross 1 step
+
+    rm -rf "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross2-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross2-build
+    cd "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross2-build     
+    
+    ../$GCC_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+     --target=$TARGET_PLATFORM \
+     --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+     --with-sysroot="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+     --enable-languages=c,c++  \
+     --program-suffix=$PROGRAM_SUFFIX \
+     --enable-werror=no \
+     --enable-poison-system-directories \
+     --with-gmp="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-mpfr="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-mpc="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-ppl="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+     --with-cloog="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+        2>&1 | tee configure-stdout.log
+    
+    #--with-headers=$BUILDGCC_SYSTEM_HEADER_DIR <-- needed to copy includes in prefix/target/sys-include. Otherwise, configure failed saying preprocessor /lib/cpp can't run
+    
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross2-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GCC cross 2 failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-cross2-build/make_sucessfully.done ]]; then
+	update_all_lib_path "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM || exit 1
+	update_all_lib_path -r "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM || exit 1
+	cd "$BUILDGCC_BUILD_DIR"
+	touch make_sucessfully.done
+	echo *-*-*-*------------------------------------------------------------------ Finished ------------------------------------------------------------------------
+fi

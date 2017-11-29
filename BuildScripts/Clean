@@ -1,0 +1,83 @@
+#!/bin/bash
+# Unmount and rename old sparsebundle, if we're using them
+# Rename existing dir
+#
+# After this script, "$BUILDGCC_SPARSEBUNDLE_NAME" folder doesn't exist anymore and "$BUILDGCC_SPARSEBUNDLE_NAME" doesn't exist anymore (even if we're NOT using them)
+
+
+
+#check env var
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+	echo BUILDGCC_BUILD_DIR not defined
+	exit 1
+fi
+if [ -z "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+then
+	echo BUILDGCC_SPARSEBUNDLE_NAME not defined
+	exit 1
+fi
+
+set -uf -o pipefail
+
+
+
+#Try to unmount in case $BUILDGCC_BUILD_DIR is currently a mount point. Most likely a previous build, but could be something totally different manually mount by user (who knows?).
+if [ -d "$BUILDGCC_BUILD_DIR" ] && is_mountpoint "$BUILDGCC_BUILD_DIR"
+then
+	if ! hdiutil detach "$BUILDGCC_BUILD_DIR"
+	then
+		echo Cannot unmount "$BUILDGCC_BUILD_DIR". Must be in use by another process.
+		exit 1
+	fi
+fi
+
+#It must not be possible that this next test succeed if hdiutil detach succeed. But I like to be sure sure sure  
+if [ -d "$BUILDGCC_BUILD_DIR" ] && is_mountpoint "$BUILDGCC_BUILD_DIR"
+then
+  echo Directory "$BUILDGCC_BUILD_DIR" is still a mount point after a hdiutil detach "$BUILDGCC_BUILD_DIR". A process might have locked it.
+  exit 1
+fi
+
+#Rename directory if there is one, whatever it is.
+if [ -d "$BUILDGCC_BUILD_DIR" ]; then
+	ext="-old"
+	newname="$BUILDGCC_BUILD_DIR"$ext
+	if [[ -e "$newname" ]] ; then
+		i=1
+		newname="$BUILDGCC_BUILD_DIR"$ext-"$i"
+		while [[ -e "$newname" ]] ; do
+			let i++
+			newname="$BUILDGCC_BUILD_DIR"$ext-"$i"
+		done
+	fi
+	echo "$BUILDGCC_BUILD_DIR" is renamed to "$newname"
+	mv -i "$BUILDGCC_BUILD_DIR" "$newname" || exit 1
+fi
+
+
+#Even if we're not using sparsebundle, rename if an old one exists, just to avoid confusion.
+
+#umount and eject sparsebundle before rename. Looks like renaming a attached/mounted sparsebundle works but that smells.
+# umount_sparsebundle returns 0 if it's ejected, even if it was ejected before the call
+if [ -d "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+then
+	umount_sparsebundle "$BUILDGCC_SPARSEBUNDLE_NAME" || exit 1
+fi
+
+#rename file if needed
+if [ -d "$BUILDGCC_SPARSEBUNDLE_NAME" ]; then
+	ext="-old"
+	newname="$BUILDGCC_SPARSEBUNDLE_NAME"$ext
+	if [[ -e "$newname" ]] ; then
+		i=1
+		newname="$BUILDGCC_SPARSEBUNDLE_NAME"$ext-"$i"
+		while [[ -e "$newname" ]] ; do
+			let i++
+			newname="$BUILDGCC_SPARSEBUNDLE_NAME"$ext-"$i"
+		done
+	fi
+	echo "$BUILDGCC_SPARSEBUNDLE_NAME" is renamed to "$newname"
+	mv -i "$BUILDGCC_SPARSEBUNDLE_NAME" "$newname" || exit 1
+fi

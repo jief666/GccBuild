@@ -1,0 +1,231 @@
+#!/bin/bash
+
+# Do not define var in this script. Define tham all in SetupEnv-$BUILDGCC_SUFFIX.
+# The goal is to be able to copy and paste command from this script to a console. Helped me a lot when debugging step by step
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+  echo BUILDGCC_BUILD_DIR not defined
+  exit 1
+fi
+
+
+# ulimit maybe not needed.
+ulimit -n 1024
+set -u -o pipefail
+
+#If every component are already sucessfully built, "$BUILDGCC_BUILD_DIR"/make_sucessfully.done will be recreated immediately.
+[ -f "$BUILDGCC_BUILD_DIR"/make_sucessfully.done ] && rm "$BUILDGCC_BUILD_DIR"/make_sucessfully.done
+
+#mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM
+#mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr
+
+
+echo *-*-*-*------------------------------------------------------------------ GMP ------------------------------------------------------------------------
+
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]; then
+
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$GMP_SOURCES_DIR" || exit 1
+		
+	rm -rf "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+	
+	#--disable-assembly <- needed for isl
+	
+	
+	
+	../$GMP_SOURCES_DIR/configure \
+	  CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --enable-cxx \
+	  --disable-shared \
+	  --disable-assembly \
+	  --with-pic \
+	   2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GMP failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+echo *-*-*-*------------------------------------------------------------------ MPFR ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build/make_sucessfully.done ]]; then
+
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$MPFR_SOURCES_DIR" || exit 1
+		
+	rm -rf "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build
+	
+	
+	
+	../$MPFR_SOURCES_DIR/configure \
+	  CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --with-gmp="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --disable-shared \
+	    2>&1 | tee configure-stdout.log
+	
+	# --enable-shared \ <- error illegal text-relocation to '___gmp_binvert_limb_table'
+	#--disable-assembly \ <- not recognized
+	  
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ MPFR failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+echo *-*-*-*------------------------------------------------------------------ MPC ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$MPFR_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build/make_sucessfully.done ]]; then
+
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$MPC_SOURCES_DIR" || exit 1
+		
+	rm -rf "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build
+	
+	
+	
+	../$MPC_SOURCES_DIR/configure \
+	  CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --disable-shared \
+	  --with-gmp="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --with-mpfr="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	    2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ MPC failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+echo *-*-*-*------------------------------------------------------------------ ISL ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$MPC_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done ]]; then
+
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$ISL_SOURCES_DIR" || exit 1
+	
+	rm -rf "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	
+	
+	
+	../$ISL_SOURCES_DIR/configure \
+	  CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --with-gmp-prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --with-pic=PIC \
+	   2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ ISL failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ GCC ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/make_sucessfully.done ]]; then
+		
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$GCC_SOURCES_DIR" || exit 1
+	
+	rm -rf "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build 
+	
+	#At stage 3 : xgcc will need "dylib1.10.5.o" and "crt1.10.6.o". "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/lib/gcc/ is one of the default path for xgcc
+	mkdir "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/lib/
+	mkdir "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/lib/gcc/
+	cp "$BUILDGCC_TOOLS_DIR"/AppleDevTools/lib/dylib1.10.5.o "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/lib/gcc/
+	cp "$BUILDGCC_TOOLS_DIR"/AppleDevTools/lib/crt1.10.6.o "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/lib/gcc/
+	
+	../$GCC_SOURCES_DIR/configure \
+	  native_system_header_dir=${BUILDGCC_TOOLS_DIR}/AppleDevTools/include \
+	  --with-native-system-header-dir=${BUILDGCC_TOOLS_DIR}/AppleDevTools/include \
+	  --with-includedir=${BUILDGCC_TOOLS_DIR}/AppleDevTools/include \
+	  CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	 --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --enable-languages=c,c++  \
+	 --program-suffix=$PROGRAM_SUFFIX \
+	 --with-gmp="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --with-mpfr="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --with-mpc="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --with-isl="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --with-cloog="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --disable-bootstrap \
+	    2>&1 | tee configure-stdout.log
+	
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && cp "$BUILDGCC_TOOLS_DIR"/AppleDevTools/lib/dylib1.10.5.o "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/lib
+        [[ $? == 0 ]] && cp "$BUILDGCC_TOOLS_DIR"/AppleDevTools/lib/crt1.10.6.o "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/lib
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GCC failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GCC_SOURCES_DIR-build/make_sucessfully.done ]]; then
+	update_all_lib_path "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM || exit 1
+	update_all_lib_path -r "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM || exit 1
+	cd "$BUILDGCC_BUILD_DIR"
+	touch make_sucessfully.done
+	echo *-*-*-*------------------------------------------------------------------ Finished ------------------------------------------------------------------------
+fi

@@ -1,0 +1,76 @@
+--- /JiefWorld/GCC441-arm-none-linux-gnueabi-build/gcc-4.4.1/gcc/doc/invoke.texi	2017-09-12 08:30:48 +0000
++++ /JiefWorld/GCC441-arm-none-linux-gnueabi-build/gcc-4.4.1/gcc/doc/invoke.texi	2017-09-12 08:33:38 +0000
+@@ -4622,30 +4622,30 @@
+ @opindex fdump-rtl-ce3
+ @option{-fdump-rtl-ce1}, @option{-fdump-rtl-ce2}, and
+ @option{-fdump-rtl-ce3} enable dumping after the three
+ if conversion passes. 
+ 
+-@itemx -fdump-rtl-cprop_hardreg
++@item -fdump-rtl-cprop_hardreg
+ @opindex fdump-rtl-cprop_hardreg
+ Dump after hard register copy propagation.
+ 
+-@itemx -fdump-rtl-csa
++@item -fdump-rtl-csa
+ @opindex fdump-rtl-csa
+ Dump after combining stack adjustments.
+ 
+ @item -fdump-rtl-cse1
+ @itemx -fdump-rtl-cse2
+ @opindex fdump-rtl-cse1
+ @opindex fdump-rtl-cse2
+ @option{-fdump-rtl-cse1} and @option{-fdump-rtl-cse2} enable dumping after
+ the two common sub-expression elimination passes.
+ 
+-@itemx -fdump-rtl-dce
++@item -fdump-rtl-dce
+ @opindex fdump-rtl-dce
+ Dump after the standalone dead code elimination passes.
+ 
+-@itemx -fdump-rtl-dbr
++@item -fdump-rtl-dbr
+ @opindex fdump-rtl-dbr
+ Dump after delayed branch scheduling.
+ 
+ @item -fdump-rtl-dce1
+ @itemx -fdump-rtl-dce2
+@@ -4686,11 +4686,11 @@
+ 
+ @item -fdump-rtl-initvals
+ @opindex fdump-rtl-initvals
+ Dump after the computation of the initial value sets.
+ 
+-@itemx -fdump-rtl-into_cfglayout
++@item -fdump-rtl-into_cfglayout
+ @opindex fdump-rtl-into_cfglayout
+ Dump after converting to cfglayout mode.
+ 
+ @item -fdump-rtl-ira
+ @opindex fdump-rtl-ira
+@@ -4716,11 +4716,11 @@
+ 
+ @item -fdump-rtl-rnreg
+ @opindex fdump-rtl-rnreg
+ Dump after register renumbering.
+ 
+-@itemx -fdump-rtl-outof_cfglayout
++@item -fdump-rtl-outof_cfglayout
+ @opindex fdump-rtl-outof_cfglayout
+ Dump after converting from cfglayout mode.
+ 
+ @item -fdump-rtl-peephole2
+ @opindex fdump-rtl-peephole2
+@@ -4728,11 +4728,11 @@
+ 
+ @item -fdump-rtl-postreload
+ @opindex fdump-rtl-postreload
+ Dump after post-reload optimizations.
+ 
+-@itemx -fdump-rtl-pro_and_epilogue
++@item -fdump-rtl-pro_and_epilogue
+ @opindex fdump-rtl-pro_and_epilogue
+ Dump after generating the function pro and epilogues.
+ 
+ @item -fdump-rtl-regmove
+ @opindex fdump-rtl-regmove

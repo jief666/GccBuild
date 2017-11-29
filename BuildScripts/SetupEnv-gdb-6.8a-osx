@@ -1,0 +1,10 @@
+#!/bin/bash
+
+
+export GMP_SOURCES_DIR="gmp-6.1.2"
+export ISL_SOURCES_DIR="isl-0.18"
+export GDB_SOURCES_DIR="gdb-6.8a"
+
+export HOST_PLATFORM=x86_64-apple-darwin
+export TARGET_PLATFORM=x86_64-apple-darwin
+export PROGRAM_SUFFIX=-6.8a

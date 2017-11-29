@@ -1,0 +1,11 @@
+#!/bin/bash
+
+
+export GMP_SOURCES_DIR="gmp-4.3.2"
+export MPFR_SOURCES_DIR="mpfr-2.4.2"
+export MPC_SOURCES_DIR="mpc-0.8.1"
+export ISL_SOURCES_DIR="isl-0.15"
+export GCC_SOURCES_DIR="gcc-6.4.0"
+
+export TARGET_PLATFORM=x86_64-apple-darwin
+export PROGRAM_SUFFIX=-6.4.0

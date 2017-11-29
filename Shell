@@ -1,0 +1,46 @@
+#!/bin/bash
+SCRIPT_ABS_FILENAME=`perl -e 'use Cwd "abs_path";print abs_path(shift)' "${BASH_SOURCE[0]}"`
+SCRIPT_DIR=`dirname "$SCRIPT_ABS_FILENAME"`
+SCRIPT_NAME=`basename "$SCRIPT_ABS_FILENAME"`
+
+
+#check args
+export BUILDGCC_STARTUP_DIR="$(echo "$(cd "$1" && pwd)")"
+if [ -z "$BUILDGCC_STARTUP_DIR" ]
+then
+  echo "Usage: $SCRIPT_NAME parent_dir build_suffix"
+  exit 1
+fi
+if [ ! -d "$BUILDGCC_STARTUP_DIR" ]
+then
+  echo Directory "$BUILDGCC_STARTUP_DIR" does not exist.
+  echo "Usage: $SCRIPT_NAME parent_dir build_suffix"  exit 1
+fi
+export BUILDGCC_SUFFIX="$2"
+if [ -z "$BUILDGCC_SUFFIX" ]
+then
+  echo "Usage: $SCRIPT_ABS_FILENAME parent_dir build_suffix"  exit 1
+fi
+
+if [  -z "$BUILDGCC_BUILD_DIR" ]
+then
+	. "$SCRIPT_DIR"/BuildScripts/SetupEnv
+fi
+
+#check env var
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+  echo BUILDGCC_BUILD_DIR not defined
+  exit 1
+fi
+if [ -z "$BUILDGCC_SUFFIX" ]
+then
+  echo BUILDGCC_SUFFIX not defined
+  exit 1
+fi
+
+set -uf -o pipefail
+
+
+bash

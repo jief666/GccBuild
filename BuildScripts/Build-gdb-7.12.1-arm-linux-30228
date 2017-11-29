@@ -1,0 +1,169 @@
+#!/bin/bash
+
+# Do not define var in this script. Define tham all in SetupEnv-$BUILDGCC_SUFFIX.
+# The goal is to be able to copy and paste command from this script to a console. Helped me a lot when debugging step by step
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+  echo BUILDGCC_BUILD_DIR not defined
+  exit 1
+fi
+
+# ulimit maybe not needed.
+ulimit -n 1024
+set -u -o pipefail
+
+#If every component are already sucessfully built, "$BUILDGCC_BUILD_DIR"/make_sucessfully.done will be recreated immediately.
+[ -f "$BUILDGCC_BUILD_DIR"/make_sucessfully.done ] && rm "$BUILDGCC_BUILD_DIR"/make_sucessfully.done
+
+mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM
+mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr
+# on Lion, we must specify destination name ('include') even if it's the same
+[[ ! -L "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr/include ]] && ln -s ../include/ "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/usr/include
+
+mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/include
+"$BUILDGCC_BUILDSCRIPTS"/Extract "include_linux-dsm6.0" $TARGET_PLATFORM/include linux || exit 1
+"$BUILDGCC_BUILDSCRIPTS"/Extract "include_asm-dsm6.0" $TARGET_PLATFORM/include asm || exit 1
+"$BUILDGCC_BUILDSCRIPTS"/Extract "include_asm-generic-dsm6.0" $TARGET_PLATFORM/include asm-generic || exit 1
+
+#-lgcc_eh seems missing for GMP, ISL and GDB. It has to be added at the end of the command line. That's the reason for the file 'arm-none-linux-gnueabi-gcceh' below.
+cat > "$BUILDGCC_BUILD_DIR"/arm-none-linux-gnueabi-gcceh <<'END' \
+#!/bin/bash
+exec /Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-gcc --sysroot /Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi -I/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/include $@ -lgcc_eh
+END
+
+chmod a+x "$BUILDGCC_BUILD_DIR"/arm-none-linux-gnueabi-gcceh
+
+echo *-*-*-*------------------------------------------------------------------ GMP ------------------------------------------------------------------------
+
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]; then
+
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$GMP_SOURCES_DIR" || exit 1
+		
+	rm -rf "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+
+	# --sysroot=/JiefLand/5.Devel/Syno/DSM6.1/ds.armada370-6.1.env/usr/local/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot
+	
+	#had to put flags in CC (instead of CFLAGS) variable so they are used when configure do the "check how to run preprocessor"
+	../$GMP_SOURCES_DIR/configure CPPFLAGS="-fexceptions" \
+      CC=""$BUILDGCC_BUILD_DIR"/arm-none-linux-gnueabi-gcceh" \
+      CC_FOR_BUILD="cc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-g++" \
+      RANLIB="/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-ranlib" \
+      --host=$TARGET_PLATFORM \
+      --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --enable-cxx \
+	  --disable-shared \
+	  --disable-assembly \
+	  --with-pic \
+	   2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GMP failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+echo *-*-*-*------------------------------------------------------------------ ISL ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done ]]; then
+
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$ISL_SOURCES_DIR" || exit 1
+	
+	rm -rf "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	
+	
+	
+	../$ISL_SOURCES_DIR/configure \
+      CC=""$BUILDGCC_BUILD_DIR"/arm-none-linux-gnueabi-gcceh" \
+      CXX="/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-g++" \
+      RANLIB="/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-ranlib" \
+      --host=$TARGET_PLATFORM \
+	  --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+      --with-gmp-prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	  --with-pic=PIC \
+	   2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ ISL failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ GDB ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build/make_sucessfully.done ]]; then
+	
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$GDB_SOURCES_DIR" || exit 1
+	
+	rm -rf "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build
+	
+	#https://sourceware.org/bugzilla/show_bug.cgi?id=20653
+	cp -n "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c.orig
+	sed $'527s|\'\\\\0\'|NULL|' "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c.orig \
+	  >"$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c
+	
+	cp -n "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure.orig
+	sed $'5488s|-lmpc -lmpfr ||' "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure.orig \
+	  >"$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure
+	
+	
+	
+	#error: unknown type name 'bfd_mach_o_load_command_type'
+	
+
+	../$GDB_SOURCES_DIR/configure \
+     CC=""$BUILDGCC_BUILD_DIR"/arm-none-linux-gnueabi-gcceh" \
+     CC_FOR_BUILD="cc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	 CXX="arm-none-linux-gnueabi-g++" \
+	 --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --with-isl="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+     --host=$TARGET_PLATFORM \
+	 --program-suffix=$PROGRAM_SUFFIX \
+	    2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GDB failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build/make_sucessfully.done ]]; then
+	# Not doing update_all_lib_path because it's not os x binaries
+	cd "$BUILDGCC_BUILD_DIR"
+	touch make_sucessfully.done
+	echo *-*-*-*------------------------------------------------------------------ Finished ------------------------------------------------------------------------
+fi

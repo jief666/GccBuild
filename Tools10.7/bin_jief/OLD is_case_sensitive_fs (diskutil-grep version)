@@ -1,0 +1,33 @@
+#!/bin/bash
+SCRIPT_ABS_FILENAME=`perl -e 'use Cwd "abs_path";print abs_path(shift)' "${BASH_SOURCE[0]}"`
+SCRIPT_DIR=`dirname "$SCRIPT_ABS_FILENAME"`
+
+if [ -z "$1" ]
+then
+  echo "Usage: $SCRIPT_ABS_FILENAME file"
+  exit 1
+fi
+
+abs_filename_orig="$(readlink -f $1)"
+abs_filename="$abs_filename_orig"
+#echo abs_filename="$abs_filename"
+
+diskutil_res="$(diskutil info "$abs_filename")"
+while [[ "$diskutil_res" == "Could not find disk"* ]]
+do
+  if [[ "$abs_filename" == "/" ]]
+  then
+    echo Error : couldn\'t find diskutil info for "$abs_filename_orig"
+    exit -1
+  fi
+  abs_filename="$(dirname "$abs_filename")"
+  diskutil_res="$(diskutil info "$abs_filename")"
+done
+
+if grep -q "Case-sensitive" <<<"$diskutil_res"; then
+  #echo "Case-sensitive"
+  exit 0
+else
+  #echo "Case-insensitive"
+  exit 1
+fi

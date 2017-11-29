@@ -1,0 +1,16 @@
+#!/bin/bash
+
+
+export GMP_SOURCES_DIR="gmp-4.3.2"
+export MPFR_SOURCES_DIR="mpfr-2.4.2"
+export MPC_SOURCES_DIR="mpc-0.8.1"
+#export ELF_SOURCES_DIR="libelf-0.8.13"
+export ISL_SOURCES_DIR="isl-0.12.2"
+export CLOOG_SOURCES_DIR="cloog-0.18.1"
+export BINUTILS_SOURCES_DIR="binutils-2.25"
+export GCC_SOURCES_DIR="gcc-4.9.3"
+export GLIBC_SOURCES_DIR="glibc-2.20"
+
+export HOST_PLATFORM=x86_64-apple-darwin
+export TARGET_PLATFORM=arm-none-linux-gnueabi
+export PROGRAM_SUFFIX=-4.9.3

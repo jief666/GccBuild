@@ -1,0 +1,14 @@
+#!/bin/bash
+
+
+export GMP_SOURCES_DIR="gmp-6.1.0"
+export MPFR_SOURCES_DIR="mpfr-3.1.4"
+export MPC_SOURCES_DIR="mpc-1.0.3"
+export ISL_SOURCES_DIR="isl-0.16.1"
+export BINUTILS_SOURCES_DIR="binutils-2.28"
+export GCC_SOURCES_DIR="gcc-7.1.0"
+export LIBC_DIR="avr-libc-2.0.0"
+
+export HOST_PLATFORM=x86_64-apple-darwin
+export TARGET_PLATFORM=avr
+export PROGRAM_SUFFIX=-7.1.0

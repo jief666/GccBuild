@@ -1,0 +1,15 @@
+--- /JiefWorld/GCC710-avr-build/gcc-7.1.0 new/gcc/config/avr/avr-c.c	2017-01-01 12:07:43 +0000
++++ /JiefWorld/GCC710-avr-build/gcc-7.1.0/gcc/config/avr/avr-c.c	2017-09-06 21:50:14 +0000
+@@ -290,10 +290,12 @@
+ void
+ avr_cpu_cpp_builtins (struct cpp_reader *pfile)
+ {
+   builtin_define_std ("AVR");
+ 
++  builtin_define_std("JIEF_FLASHSTRING_PRINTFWARNING_HACK"); // by Jief. So we know that printf format attribute works.
++
+   /* __AVR_DEVICE_NAME__ and  avr_mcu_types[].macro like __AVR_ATmega8__
+      are defined by -D command option, see device-specs file.  */
+ 
+   if (avr_arch->macro)
+     cpp_define_formatted (pfile, "__AVR_ARCH__=%s", avr_arch->macro);

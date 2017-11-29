@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+
+if [ -z "$1" ]
+then
+  echo "Usage: $SCRIPT_ABS_FILENAME archive_file_without_suffix [sub dir of BUILDGCC_BUILD_DIR] [name_of_extracted_folder]"
+  echo "       suffix tried tar.bz2, tar.xz, tar.gz"
+  exit 1
+fi
+basename=$1
+if [ -z "$2" ]
+then
+	dirname="$BUILDGCC_BUILD_DIR"
+else
+	dirname="$BUILDGCC_BUILD_DIR"/"$2"
+fi
+if [ -z "$3" ]
+then
+	extractdirname="$dirname"/"$basename"
+else
+	extractdirname="$dirname"/"$3"
+fi
+
+
+#check env var
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+	echo BUILDGCC_BUILD_DIR not defined
+	exit 1
+fi
+if [ -z "$BUILDGCC_SOURCESDIR" ]
+then
+	echo BUILDGCC_SOURCESDIR not defined
+	exit 1
+fi
+
+set -uf -o pipefail
+
+
+if [ ! -f "$extractdirname"/extract_sucessfully.done ]
+then
+	rm -rf "$BUILDGCC_BUILD_DIR"/"$basename"
+	if [ -f "$BUILDGCC_SOURCESDIR"/"$basename".tar.xz ]; then
+		echo Extracting \""$BUILDGCC_SOURCESDIR"/"$basename".tar.xz\" to \""$extractdirname"\"
+		gtar xfv "$BUILDGCC_SOURCESDIR"/"$basename".tar.xz -C "$dirname" || exit 1
+		
+	elif [ -f "$BUILDGCC_SOURCESDIR"/"$basename".tar.bz2 ]; then
+		echo Extracting \""$BUILDGCC_SOURCESDIR"/"$basename".tar.bz2\" to \""$extractdirname"\"
+		gtar xfv "$BUILDGCC_SOURCESDIR"/"$basename".tar.bz2 -C "$dirname" || exit 1
+	
+	elif [ -f "$BUILDGCC_SOURCESDIR"/"$basename".tar.gz ]; then
+		echo Extracting \""$BUILDGCC_SOURCESDIR"/"$basename".tar.gz\" to \""$extractdirname"\"
+		gtar xfv "$BUILDGCC_SOURCESDIR"/"$basename".tar.gz -C "$dirname" || exit 1
+		
+	else
+		echo "Cannot find any archive whose basename is \"$basename\" in $BUILDGCC_SOURCESDIR"
+		exit 1
+	fi
+	touch "$extractdirname"/extract_sucessfully.done || exit 1
+else
+	echo "$BUILDGCC_SOURCESDIR"/"$basename" already successfully extracted
+fi
+

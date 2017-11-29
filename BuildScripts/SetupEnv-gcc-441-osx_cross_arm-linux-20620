@@ -1,0 +1,21 @@
+#!/bin/bash
+
+
+export GMP_SOURCES_DIR="gmp-4.3.1"
+export MPFR_SOURCES_DIR="mpfr-2.4.1"
+export MPC_SOURCES_DIR="mpc-0.8.1"
+export PPL_SOURCES_DIR="ppl-0.10.2"
+export CLOOG_SOURCES_DIR="cloog-ppl-0.15.9"
+export BINUTILS_SOURCES_DIR="binutils-2.19.1"
+export GCC_SOURCES_DIR="gcc-4.4.1"
+export GLIBC_SOURCES_DIR="glibc-2.11.1"
+export GLIBC_PORTS_SOURCES_DIR="glibc-ports-2.11"
+
+export HOST_PLATFORM=x86_64-apple-darwin
+export TARGET_PLATFORM=arm-none-linux-gnueabi
+export PROGRAM_SUFFIX=-4.4.1
+
+#looks like on X.7 and X.8, /usr/lib/libstdc++.6.dylib doesn't work (missing symbol __ZNSt16invalid_argumentD1Ev). DYLD_LIBRARY_PATH will allow to find the one that came with gcc 4.8
+#Seems to happen only on Lion, only for this build.
+[ "$BUILDGCC_OSX_VERSION" -eq 7 ] && export DYLD_LIBRARY_PATH="$BUILDGCC_TOOLS_DIR/gcc-v4.8.5/lib/gcc/4.8"
+[ "$BUILDGCC_OSX_VERSION" -eq 8 ] && export DYLD_LIBRARY_PATH="$BUILDGCC_TOOLS_DIR/gcc-v4.8.5/lib/gcc/4.8"

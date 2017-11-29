@@ -1,0 +1,134 @@
+#!/bin/bash
+SCRIPT_ABS_FILENAME=`perl -e 'use Cwd "abs_path";print abs_path(shift)' "${BASH_SOURCE[0]}"`
+SCRIPT_DIR=`dirname "$SCRIPT_ABS_FILENAME"`
+SCRIPT_NAME=`basename "$SCRIPT_ABS_FILENAME"`
+
+#echo ${BASH_SOURCE[0]}
+#echo $SCRIPT_ABS_FILENAME
+
+
+#check args
+export BUILDGCC_STARTUP_DIR="$(echo "$(cd "$1" && pwd)")"
+if [ -z "$BUILDGCC_STARTUP_DIR" ]
+then
+  echo "Usage: $SCRIPT_ABS_FILENAME [parent dir] [build suffix]"
+  exit 1
+fi
+if [ ! -d "$BUILDGCC_STARTUP_DIR" ]
+then
+  echo Directory "$BUILDGCC_STARTUP_DIR" does not exist.
+  echo "Usage: $SCRIPT_ABS_FILENAME [parent dir] [build suffix]"
+  exit 1
+fi
+export BUILDGCC_SUFFIX="$2"
+if [ -z "$BUILDGCC_SUFFIX" ]
+then
+  echo "Usage: $SCRIPT_ABS_FILENAME [parent dir] [build suffix]"
+  exit 1
+fi
+command="$3"
+
+set -uf -o pipefail
+
+export BUILDGCC_SOURCENADTOOLS_DIR=$(dirname "$SCRIPT_DIR")
+export BUILDGCC_BUILDSCRIPTS="${BUILDGCC_SOURCENADTOOLS_DIR}/BuildScripts"
+export BUILDGCC_SOURCESDIR="${BUILDGCC_SOURCENADTOOLS_DIR}/Sources"
+export BUILDGCC_PATCHDIR="${BUILDGCC_SOURCENADTOOLS_DIR}/Patch-${BUILDGCC_SUFFIX}"
+
+if [ ! -f "$BUILDGCC_SOURCENADTOOLS_DIR/BuildScripts/SetupEnv-""$BUILDGCC_SUFFIX" ]
+then
+  echo The suffix "$BUILDGCC_SUFFIX" is not handle \(yet\).
+  exit 1
+fi
+
+if [ -z "${PATH_BEFORE_BUILDGCC-}" ]
+then
+  export PATH_BEFORE_BUILDGCC="$PATH"
+fi
+
+# we use /usr/bin/awk to be sure we are using the os x awk.
+
+export BUILDGCC_OSX_VERSION=$(sw_vers -productVersion | /usr/bin/awk -F. '{print $2}')
+export BUILDGCC_TOOLS_DIR="$BUILDGCC_SOURCENADTOOLS_DIR/Tools10."$BUILDGCC_OSX_VERSION""
+
+#if [ "$BUILDGCC_OSX_VERSION" -eq 7 ]
+#then
+  #looks like on Os X.7.0, /usr/lib/libstdc++.6.dylib doesn't work. DYLD_LIBRARY_PATH will allow to find the one that came with gcc 4.8
+  #export DYLD_LIBRARY_PATH="$BUILDGCC_TOOLS_DIR/gcc-v4.8.5/lib/gcc/4.8"
+#fi
+
+export BUILDGCC_PLATEFORM_COMPILER_PATH="${BUILDGCC_TOOLS_DIR}/gcc-v4.8.5/bin"
+export PATH_BUILDGCC="$BUILDGCC_SOURCENADTOOLS_DIR":"$BUILDGCC_TOOLS_DIR"/bin_gnu:"$BUILDGCC_TOOLS_DIR"/bin_jief:"$BUILDGCC_TOOLS_DIR"/bin_apple:"$BUILDGCC_TOOLS_DIR/AppleDevTools/bin"
+export PATH="$BUILDGCC_PLATEFORM_COMPILER_PATH":"$PATH_BUILDGCC"
+
+#can't use is_case_sensitive_fs before setting the path
+if is_case_sensitive_fs "$BUILDGCC_STARTUP_DIR"
+then
+  export BUILDGCC_USE_PLAIN_DIR=1
+fi
+
+export BUILDGCC_VOLNAME="Build-${BUILDGCC_SUFFIX}"
+#export BUILDGCC_BUILD_DIR="$BUILDGCC_STARTUP_DIR"/"$BUILDGCC_VOLNAME"
+export BUILDGCC_BUILD_DIR="/Volumes"/"$BUILDGCC_VOLNAME"
+
+#define BUILDGCC_SPARSEBUNDLE_NAME even if we're not using them, for script "Clean"
+export BUILDGCC_SPARSEBUNDLE_NAME="$BUILDGCC_STARTUP_DIR"/"${BUILDGCC_VOLNAME}.sparsebundle"
+#do not change directory to "$BUILDGCC_BUILD_DIR" if we're using sparsebundle. That will prevent InitAndBuild to unmount sparsebundle (bash lock to cwd)
+#[ -d "$BUILDGCC_BUILD_DIR" ] && cd "$BUILDGCC_BUILD_DIR"
+
+source "$BUILDGCC_SOURCENADTOOLS_DIR"/BuildScripts/SetupEnv-"$BUILDGCC_SUFFIX"
+
+echo BUILDGCC_SOURCENADTOOLS_DIR="$BUILDGCC_SOURCENADTOOLS_DIR"
+echo BUILDGCC_BUILD_DIR="$BUILDGCC_BUILD_DIR"
+[ -z "${BUILDGCC_USE_PLAIN_DIR-}" ] && echo BUILDGCC_SPARSEBUNDLE_NAME="$BUILDGCC_SPARSEBUNDLE_NAME"
+[ ! -z "${BUILDGCC_USE_PLAIN_DIR-}" ] && echo case sensitive file system. No need for sparsebundle
+
+export BUILDGCC_MAKEJOBS=
+
+export PS1='\[\033[36m\]'"$BUILDGCC_SUFFIX"':\[\033[33;1m\]\w\[\033[m\]\$ '
+
+return 0
+
+if [ -z "${command-}" ]
+then
+	if [ ! -z "${BUILDGCC_USE_PLAIN_DIR-}" ]
+	then
+		if [ -d "$BUILDGCC_BUILD_DIR" ]
+		then
+			if [ -f "$BUILDGCC_BUILD_DIR"/this_is_a_gcc_build_dir.empty ]
+			then
+				echo Directory $BUILDGCC_BUILD_DIR exits. Use Build to restart a build. InitAndBuild to rename to "-old" and start a new build from scratch.
+			else
+				echo Directory $BUILDGCC_BUILD_DIR exits but doesn't look like my build directory \(file "$BUILDGCC_BUILD_DIR"/this_is_a_gcc_build_dir.empty doesn't exist\)
+				echo If you use InitAndBuild, this dir will be rename to "-old" and a new build from scratch will start.
+			fi
+		else
+			echo Directory $BUILDGCC_BUILD_DIR doesn\'t exit. Use InitAndBuild to create it and start a new build.
+		fi
+	else
+		if [ -d "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+		then
+			echo Sparsebundle $BUILDGCC_SPARSEBUNDLE_NAME exits.
+			echo "  "  Use Build to restart a build. InitAndBuild to rename to \"-old\" and start a new build from scratch.
+		else
+			echo Sparsebundle $BUILDGCC_SPARSEBUNDLE_NAME doesn\'t exit. Use InitAndBuild to create it and start a new build.
+		fi
+	fi
+fi
+
+if [ -z "${command-}" ]
+then
+	bash
+else
+	if [ x"$3" = x"InitAndBuild" ]
+	then
+		InitAndBuild
+	else
+		if [ x"$3" = x"Build" ]
+		then
+			Build
+		else
+			echo unrecognized command \'$3\'. Use Build or InitAndBuild
+		fi
+	fi
+fi

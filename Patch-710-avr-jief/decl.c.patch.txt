@@ -1,0 +1,38 @@
+--- /JiefWorld/GCC710-avr-build/gcc-7.1.0/gcc/cp/decl.c	2017-04-15 03:28:31 +0000
++++ /JiefWorld/GCC710-avr-build/gcc-7.1.0.sav/gcc/cp/decl.c	2017-09-06 18:39:45 +0000
+@@ -11339,10 +11339,35 @@
+ 		  to the pointer and not to the object pointed to].  */
+ 	  if (declarator->std_attributes)
+ 	    decl_attributes (&type, declarator->std_attributes,
+ 			     0);
+ 
++      // Jief.
++      // A __FlashStringHelper* const is just built. I use it to put in print_char_table for printf warning.
++      // It's king of ugly, but I don't know how to use not-builtin type for printf warning
++      extern void set_print_char_table_forF(tree t);
++
++        if ( TREE_CODE(type) == POINTER_TYPE )
++        {
++          tree trec = TREE_TYPE(type);
++          if ( TREE_CODE(trec) == RECORD_TYPE && TREE_READONLY (trec) == 1 )
++          {
++            tree tdecl = TYPE_NAME(trec);
++            if ( TREE_CODE(tdecl) == TYPE_DECL )
++            {
++              tree tname = tdecl->type_decl.common.common.common.common.common.name;
++              const char* type_spec_thename = IDENTIFIER_POINTER (tname);
++              if ( strcmp("__FlashStringHelper", type_spec_thename) == 0 )
++              {
++                set_print_char_table_forF(type);
++              }
++            }
++          }
++        }
++
++
++
+ 	  ctype = NULL_TREE;
+ 	  break;
+ 
+ 	case cdk_error:
+ 	  break;

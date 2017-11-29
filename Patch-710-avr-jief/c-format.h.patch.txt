@@ -1,0 +1,18 @@
+--- /JiefWorld/GCC710-avr-build/gcc-7.1.0/gcc/c-family/c-format.h	2017-01-01 12:07:43 +0000
++++ /JiefWorld/GCC710-avr-build/gcc-7.1.0.sav/gcc/c-family/c-format.h	2017-09-06 18:22:14 +0000
+@@ -310,10 +310,15 @@
+ #define TEX_D32 { STD_EXT, "_Decimal32", T_D32 }
+ #define T_D64   &dfloat64_type_node
+ #define TEX_D64 { STD_EXT, "_Decimal64", T_D64 }
+ #define T_D128  &dfloat128_type_node
+ #define TEX_D128 { STD_EXT, "_Decimal128", T_D128 }
++ // By Jief.
++ // In case there no __FlashStringHelper* anywhere declared, the type 'error_mark_node' will be picked up in case of a printf warning.
++ // I tried NULL, but that crash. The thing is to use a type that cannot happen in a program. Not an int type, for example,
++ // because printf("%F", 10) will not complain.
++#define T_JIEF { STD_C89, "const __FlashStringHelper*", &error_mark_node }
+ 
+ /* Structure describing how format attributes such as "printf" are
+    interpreted as "gnu_printf" or "ms_printf" on a particular system.
+    TARGET_OVERRIDES_FORMAT_ATTRIBUTES is used to specify target-specific
+    defaults.  */

@@ -1,0 +1,17 @@
+--- /JiefWorld/GCC710-avr-build/gcc-7.1.0 new/gcc/cp/cvt.c	2017-02-10 16:33:45 +0000
++++ /JiefWorld/GCC710-avr-build/gcc-7.1.0/gcc/cp/cvt.c	2017-09-06 21:38:11 +0000
+@@ -1875,12 +1875,14 @@
+ 	  && TYPE_PRECISION (type) == TYPE_PRECISION (integer_type_node))
+ 	type = unsigned_type_node;
+       else
+ 	type = integer_type_node;
+     }
++#if FLOAT_TYPE_SIZE != DOUBLE_TYPE_SIZE // by Jief. If float is same size as double, no need to promote. void incorrect printf warning.
+   else if (type == float_type_node)
+     type = double_type_node;
++#endif
+ 
+   return type;
+ }
+ 
+ /* The routines below this point are carefully written to conform to

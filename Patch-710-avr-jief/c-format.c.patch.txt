@@ -1,0 +1,142 @@
+--- /JiefWorld/GCC710-avr-build/gcc-7.1.0 new/gcc/c-family/c-format.c	2017-03-11 01:57:11 +0000
++++ /JiefWorld/GCC710-avr-build/gcc-7.1.0/gcc/c-family/c-format.c	2017-09-06 21:44:30 +0000
+@@ -107,18 +107,28 @@
+    reference to a format string is checked for validity via a hook.
+    
+    The function returns true if strref points to any string type valid for the 
+    language dialect and target.  */
+ 
++// by Jief. Returns true if it's a __FlashStringHelper*
++bool
++isFlashString(tree strref)
++{
++	return TREE_CODE(TREE_TYPE(strref))==RECORD_TYPE && TREE_CODE(TYPE_NAME(TREE_TYPE(strref)))==TYPE_DECL && strcmp("__FlashStringHelper", IDENTIFIER_POINTER (TYPE_NAME(TREE_TYPE(strref))->type_decl.common.common.common.common.common.name)) == 0;
++}
++
+ static bool
+ valid_stringptr_type_p (tree strref)
+ {
+   return (strref != NULL
+ 	  && TREE_CODE (strref) == POINTER_TYPE
+ 	  && (TYPE_MAIN_VARIANT (TREE_TYPE (strref)) == char_type_node
+ 	      || objc_string_ref_type_p (strref)
+-	      || (*targetcm.string_object_ref_type_p) ((const_tree) strref)));
++	      || (*targetcm.string_object_ref_type_p) ((const_tree) strref)
++	      || isFlashString(strref) // by Jief. Added test to validate __FlashStringHelper
++	      )
++	  );
+ }
+ 
+ /* Handle a "format_arg" attribute; arguments as in
+    struct attribute_spec.handler.  */
+ tree
+@@ -199,11 +209,11 @@
+   if (!is_char_ref)
+     is_objc_sref = objc_string_ref_type_p (ref);
+ 
+   if (!(fmt_flags & FMT_FLAG_PARSE_ARG_CONVERT_EXTERNAL))
+     {
+-      if (is_char_ref)
++      if (is_char_ref || isFlashString(ref)) // by Jief. __FlashStringHelper are like char ref.)
+ 	return true; /* OK, we expected a char and found one.  */
+       else
+ 	{
+ 	  /* We expected a char but found an extended string type.  */
+ 	  if (is_objc_sref)
+@@ -626,25 +636,25 @@
+ {
+   { '+', '(', 0, 0 },
+   { 0, 0, 0, 0 }
+ };
+ 
+-
+-static const format_char_info print_char_table[] =
++// By Jief. Have to remove const, because the format for F will updated dynamically.
++static  format_char_info print_char_table[] =
+ {
+   /* C89 conversion specifiers.  */
+   { "di",  0, STD_C89, { T89_I,   T99_SC,  T89_S,   T89_L,   T9L_LL,  TEX_LL,  T99_SST, T99_PD,  T99_IM,  BADLEN,  BADLEN,  BADLEN  }, "-wp0 +'I",  "i",  NULL },
+   { "oxX", 0, STD_C89, { T89_UI,  T99_UC,  T89_US,  T89_UL,  T9L_ULL, TEX_ULL, T99_ST,  T99_UPD, T99_UIM, BADLEN,  BADLEN,  BADLEN }, "-wp0#",     "i",  NULL },
+   { "u",   0, STD_C89, { T89_UI,  T99_UC,  T89_US,  T89_UL,  T9L_ULL, TEX_ULL, T99_ST,  T99_UPD, T99_UIM, BADLEN,  BADLEN,  BADLEN }, "-wp0'I",    "i",  NULL },
+-  { "fgG", 0, STD_C89, { T89_D,   BADLEN,  BADLEN,  T99_D,   BADLEN,  T89_LD,  BADLEN,  BADLEN,  BADLEN,  TEX_D32, TEX_D64, TEX_D128 }, "-wp0 +#'I", "",   NULL },
++  { "fgG", 0, STD_C89, { T89_F,   BADLEN,  BADLEN,  T99_D,   BADLEN,  T89_LD,  BADLEN,  BADLEN,  BADLEN,  TEX_D32, TEX_D64, TEX_D128 }, "-wp0 +#'I", "",   NULL }, // by Jief. %f is float
+   { "eE",  0, STD_C89, { T89_D,   BADLEN,  BADLEN,  T99_D,   BADLEN,  T89_LD,  BADLEN,  BADLEN,  BADLEN,  TEX_D32, TEX_D64, TEX_D128 }, "-wp0 +#I",  "",   NULL },
+   { "c",   0, STD_C89, { T89_I,   BADLEN,  BADLEN,  T94_WI,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN }, "-w",        "",   NULL },
+   { "s",   1, STD_C89, { T89_C,   BADLEN,  BADLEN,  T94_W,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN }, "-wp",       "cR", NULL },
+   { "p",   1, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN }, "-w",        "c",  NULL },
+   { "n",   1, STD_C89, { T89_I,   T99_SC,  T89_S,   T89_L,   T9L_LL,  BADLEN,  T99_SST, T99_PD,  T99_IM,  BADLEN,  BADLEN,  BADLEN }, "",          "W",  NULL },
+   /* C99 conversion specifiers.  */
+-  { "F",   0, STD_C99, { T99_D,   BADLEN,  BADLEN,  T99_D,   BADLEN,  T99_LD,  BADLEN,  BADLEN,  BADLEN,  TEX_D32, TEX_D64, TEX_D128 }, "-wp0 +#'I", "",   NULL },
++  { "F",   0, STD_C99, { T_JIEF,   BADLEN,  BADLEN,  BADLEN,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN, BADLEN, BADLEN }, "", "",   NULL }, // by Jief. Recycle the F specifier for __FlashStringHelper* type
+   { "aA",  0, STD_C99, { T99_D,   BADLEN,  BADLEN,  T99_D,   BADLEN,  T99_LD,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN }, "-wp0 +#",   "",   NULL },
+   /* X/Open conversion specifiers.  */
+   { "C",   0, STD_EXT, { TEX_WI,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN }, "-w",        "",   NULL },
+   { "S",   1, STD_EXT, { TEX_W,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN }, "-wp",       "R",  NULL },
+   /* GNU conversion specifiers.  */
+@@ -1359,10 +1369,16 @@
+   gcc_assert (predicates);
+   return NULL;
+ }
+ 
+ 
++// by Jief. Update the print_char_table. // TODO search in the array instead of hardcoding idx;
++void set_print_char_table_forF(tree t) {
++  static tree t2 = t;
++	print_char_table[9].types[0].type = &t2;
++}
++
+ /* Check the argument list of a call to printf, scanf, etc.
+    INFO points to the function_format_info structure.
+    PARAMS is the list of argument values.  */
+ 
+ static void
+@@ -1395,10 +1411,30 @@
+   res.number_empty = 0;
+   res.number_unterminated = 0;
+   res.number_other = 0;
+   res.format_string_loc = input_location;
+ 
++  // by Jief. Check if format_tree is a __FlashStringHelper*. If yes, format_tree is initialize to the initial decl (STRING_CST).
++  if ( TREE_CODE(format_tree) == NOP_EXPR)
++  {
++    tree tree_bind_expr = TREE_OPERAND(format_tree, 0);
++    if (tree_bind_expr && TREE_CODE(tree_bind_expr) == BIND_EXPR)
++    {
++      tree tree_var_decl = TREE_OPERAND(tree_bind_expr, 0);
++      if (tree_var_decl && TREE_CODE(tree_var_decl) == VAR_DECL)
++      {
++        tree tree_decl_initial = DECL_INITIAL(tree_var_decl);
++        if (tree_decl_initial && TREE_CODE(tree_decl_initial) == STRING_CST)
++        {
++          // we're sure to get a string constant
++          //const char* fmt_string = TREE_STRING_POINTER(tree_decl_initial);
++          format_tree = tree_decl_initial;
++        }
++      }
++    }
++  }
++
+   format_ctx.res = &res;
+   format_ctx.info = info;
+   format_ctx.params = params;
+ 
+   check_function_arguments_recurse (check_format_arg, &format_ctx,
+@@ -1546,16 +1582,17 @@
+ 	  res->number_non_literal++;
+ 	  return;
+ 	}
+       offset = int_cst_value (arg1);
+     }
+-  if (TREE_CODE (format_tree) != ADDR_EXPR)
++  if (TREE_CODE (format_tree) != ADDR_EXPR  &&  TREE_CODE (format_tree) != STRING_CST) // by Jief. Add possibility to pass a STRING_CST tree for format_tree.
+     {
+       res->number_non_literal++;
+       return;
+     }
+   res->format_string_loc = EXPR_LOC_OR_LOC (format_tree, input_location);
++  if ( TREE_CODE (format_tree) == ADDR_EXPR ) // by Jief. No need to take operand is it's STRING_CST.
+   format_tree = TREE_OPERAND (format_tree, 0);
+   if (format_types[info->format_type].flags 
+       & (int) FMT_FLAG_PARSE_ARG_CONVERT_EXTERNAL)
+     {
+       bool objc_str = (info->format_type == gcc_objc_string_format_type);

@@ -1,0 +1,72 @@
+
+
+
+for i in avr-libc-2.0.0.tar.bz2 binutils-2.19.1.tar.bz2 binutils-2.25.tar.bz2 binutils-2.28.tar.bz2 cloog-0.18.1.tar.gz cloog-ppl-0.15.9.tar.gz gcc-4.4.1.tar.bz2 gcc-4.9.3.tar.bz2 gcc-4.9.4.tar.bz2 gcc-5.4.0.tar.bz2 gcc-6.4.0.tar.xz gcc-7.1.0.tar.bz2 gdb-6.8a.tar.bz2 gdb-7.10.1.tar.xz gdb-7.12.1.tar.xz gdb-8.0.1.tar.xz glibc-2.11.1.tar.xz glibc-2.20.tar.xz glibc-ports-2.11.tar.bz2 gmp-4.3.1.tar.bz2 gmp-4.3.2.tar.bz2 gmp-6.1.0.tar.xz gmp-6.1.2.tar.xz isl-0.12.2.tar.bz2 isl-0.14.1.tar.bz2 isl-0.15.tar.xz isl-0.16.1.tar.bz2 isl-0.18.tar.xz mpc-0.8.1.tar.gz mpc-1.0.3.tar.gz mpfr-2.4.1.tar.bz2 mpfr-2.4.2.tar.xz mpfr-3.1.4.tar.xz ppl-0.10.2.tar.gz ; do
+    echo ========== download $i
+    ex='^avr-libc.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c http://ftp.twaren.net/Unix/NonGNU/avr-libc/"$i"
+    fi
+
+    ex='^binutils.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c https://ftp.gnu.org/gnu/binutils/"$i"
+    fi
+
+    ex='^cloog.*$'
+    if [[ "$i" =~ $ex ]]; then
+      ex='^cloog-ppl.*$'
+      if [[ "$i" =~ $ex ]]; then
+        wget -c http://ftp.osuosl.org/pub/clfs/conglomeration/cloog-ppl/"$i"
+      else
+        wget -c https://gcc.gnu.org/pub/gcc/infrastructure/"$i"
+      fi
+    fi
+
+    ex='^isl.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c http://isl.gforge.inria.fr/"$i"
+    fi
+
+    ex='^gcc.*$'
+    if [[ "$i" =~ $ex ]]; then
+      y=${i%.*}
+      z=${y%.*}
+      wget -c https://ftp.gnu.org/gnu/gcc/"$z"/"$i"
+    fi
+
+    ex='^gdb.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c https://ftp.gnu.org/gnu/gdb/"$i"
+    fi
+
+    ex='^glibc.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c https://ftp.gnu.org/gnu/libc/"$i"
+    fi
+
+    ex='^gmp.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c https://ftp.gnu.org/gnu/gmp/"$i"
+    fi
+
+    ex='^mpc.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c http://ftp.nluug.nl/languages/gcc/infrastructure/"$i"
+    fi
+
+    ex='^mpfr.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c https://ftp.gnu.org/gnu/mpfr/"$i"
+    fi
+
+    ex='^ppl.*$'
+    if [[ "$i" =~ $ex ]]; then
+      wget -c https://gcc.gnu.org/pub/gcc/infrastructure/"$i"
+    fi
+
+    if [ ! -f "$i" ]
+    then
+      echo unhandled file : $i
+    fi
+done

@@ -1,0 +1,185 @@
+#!/bin/bash
+
+# Do not define var in this script. Define tham all in SetupEnv-$BUILDGCC_SUFFIX.
+# The goal is to be able to copy and paste command from this script to a console. Helped me a lot when debugging step by step
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+  echo BUILDGCC_BUILD_DIR not defined
+  exit 1
+fi
+
+
+# ulimit maybe not needed.
+ulimit -n 1024
+set -u -o pipefail
+
+mkdir -p "$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/include
+"$BUILDGCC_BUILDSCRIPTS"/Extract "include_linux-dsm6.0" $TARGET_PLATFORM/include linux || exit 1
+"$BUILDGCC_BUILDSCRIPTS"/Extract "include_asm-dsm6.0" $TARGET_PLATFORM/include asm || exit 1
+"$BUILDGCC_BUILDSCRIPTS"/Extract "include_asm-generic-dsm6.0" $TARGET_PLATFORM/include asm-generic || exit 1
+
+
+echo *-*-*-*------------------------------------------------------------------ GMP ------------------------------------------------------------------------
+
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]; then
+
+    "$BUILDGCC_BUILDSCRIPTS"/Extract "$GMP_SOURCES_DIR" || exit 1
+        
+    rm -rf "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+    mkdir "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+    cd "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build
+    
+    #--disable-assembly <- needed for isl
+    
+
+    
+    ../$GMP_SOURCES_DIR/configure \
+      CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+      --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --enable-cxx \
+       2>&1 | tee configure-stdout.log
+    
+    if [[ -f config.status ]]; then
+        make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+        #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+        [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+        [[ $? == 0 ]] && touch make_sucessfully.done
+    
+    fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GMP failed ------------------------------------------------------------------------
+	exit 1
+fi
+
+
+
+echo *-*-*-*------------------------------------------------------------------ ISL ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GMP_SOURCES_DIR-build/make_sucessfully.done  &&  ! -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done ]]; then
+	
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$ISL_SOURCES_DIR" || exit 1
+	
+	rm -rf "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build
+	
+	
+	
+	../$ISL_SOURCES_DIR/configure \
+	  CC="gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  CXX="g++ -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+	  --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+      --with-gmp-prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+	  --with-pic=PIC \
+	   2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    #[[ $? == 0 ]] && make $BUILDGCC_MAKEJOBS check 2>&1 | tee make-check-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ ISL failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+echo *-*-*-*------------------------------------------------------------------ GDB ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$ISL_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build/make_sucessfully.done ]]; then
+	
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$GDB_SOURCES_DIR" || exit 1
+	
+	rm -rf "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build
+	cd "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build
+	
+	#https://sourceware.org/bugzilla/show_bug.cgi?id=20653
+	cp -n "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c.orig
+	sed $'527s|\'\\\\0\'|NULL|' "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c.orig \
+	  >"$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/gdb/location.c
+	
+	cp -n "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure.orig
+	sed $'5488s|-lmpc -lmpfr ||' "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure.orig \
+	  >"$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR/configure
+	
+	# doesn't work if CC is set to "gcc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include". No idea why.
+	export CPATH="${BUILDGCC_TOOLS_DIR}/AppleDevTools/include"
+	../$GDB_SOURCES_DIR/configure \
+     --prefix="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+	 --with-isl="$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM \
+	 --program-suffix=$PROGRAM_SUFFIX \
+     --target=$TARGET_PLATFORM \
+     --with-expat \
+     --without-libunwind-ia64 \
+     --without-guile \
+	 --without-babeltrace \
+	   2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+	unset CPATH
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GDB failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+echo *-*-*-*------------------------------------------------------------------ GDB server ------------------------------------------------------------------------
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-build/make_sucessfully.done   &&  ! -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-server-build/make_sucessfully.done ]]; then
+	
+	"$BUILDGCC_BUILDSCRIPTS"/Extract "$GDB_SOURCES_DIR" || exit 1
+	
+	rm -rf "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-server-build
+	mkdir "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-server-build
+	cd "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-server-build
+		
+	../$GDB_SOURCES_DIR/gdb/gdbserver/configure \
+	 CC="/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-gcc --sysroot /Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi -I/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/include" \
+     CC_FOR_BUILD="cc -I${BUILDGCC_TOOLS_DIR}/AppleDevTools/include" \
+     RANLIB="/Volumes/Build-gcc-493-osx_cross_arm-linux-30228/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-ranlib" \
+	 --prefix="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM \
+	 --program-suffix=$PROGRAM_SUFFIX \
+     --host=$TARGET_PLATFORM \
+     --target=$TARGET_PLATFORM \
+     --includedir="$BUILDGCC_BUILD_DIR"/$TARGET_PLATFORM/include \
+     ac_cv_func_strstr_working=yes \
+	   2>&1 | tee configure-stdout.log
+	
+	if [[ -f config.status ]]; then
+	    make $BUILDGCC_MAKEJOBS 2>&1 | tee make-stdout.log
+	    [[ $? == 0 ]] && make install 2>&1 | tee make-install-stdout.log
+	    [[ $? == 0 ]] && touch make_sucessfully.done
+	fi
+
+fi
+if [ ! -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-server-build/make_sucessfully.done ]
+then
+	echo *-*-*-*------------------------------------------------------------------ GDB server failed------------------------------------------------------------------------
+	exit 1
+fi
+
+
+if [[ -f "$BUILDGCC_BUILD_DIR"/$GDB_SOURCES_DIR-server-build/make_sucessfully.done ]]; then
+	echo *-*-*-*------------------------------------------------------------------ Finished ------------------------------------------------------------------------
+	update_all_lib_path "$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM || exit 1
+	update_all_lib_path -r "$BUILDGCC_BUILD_DIR"/$HOST_PLATFORM || exit 1
+	cd "$BUILDGCC_BUILD_DIR"
+	touch make_sucessfully.done
+fi

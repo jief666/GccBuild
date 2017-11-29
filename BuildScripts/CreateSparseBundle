@@ -1,0 +1,42 @@
+#!/bin/bash
+# Create the sparsebundle if we're using them. Else, do nothing.
+
+
+
+#check env var
+
+if [ -z "${BUILDGCC_USE_PLAIN_DIR-}" ]
+then
+	if [ -z "$BUILDGCC_VOLNAME" ]
+	then
+		echo BUILDGCC_VOLNAME not defined
+		exit 1
+	fi
+	if [ -z "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+	then
+		echo BUILDGCC_SPARSEBUNDLE_NAME not defined
+		exit 1
+	fi
+fi
+
+set -uf -o pipefail
+
+
+
+#if we use sparsebundle, create it.
+if [ -z "${BUILDGCC_USE_PLAIN_DIR-}" ]
+then
+
+	if [ -d "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+	then
+		echo Sparsebundle "$BUILDGCC_SPARSEBUNDLE_NAME" already exists. Did you call InitAndBuild ? If yes, that\'s a bug !
+	else
+		#If sparsebundle doesn't exist -> create
+		hdiutil create -size 8G -fs "Case-sensitive Journaled HFS+" -type SPARSEBUNDLE -layout NONE -volname "$BUILDGCC_VOLNAME" "$BUILDGCC_SPARSEBUNDLE_NAME" || exit 1
+	fi
+
+else
+	:
+	#No need for sparsebundle because we are on a case sensitive file system.
+	
+fi

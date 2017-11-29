@@ -1,0 +1,110 @@
+#!/bin/bash
+SCRIPT_ABS_FILENAME=`perl -e 'use Cwd "abs_path";print abs_path(shift)' "${BASH_SOURCE[0]}"`
+SCRIPT_DIR=`dirname "$SCRIPT_ABS_FILENAME"`
+SCRIPT_NAME=`basename "$SCRIPT_ABS_FILENAME"`
+
+# Mount the sparsebundle if we're using them, or just create the directory "$BUILDGCC_BUILD_DIR" if not exists.
+# After this script, the directory "$BUILDGCC_BUILD_DIR" exists and may not be empty.
+
+#check env var
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+	echo BUILDGCC_BUILD_DIR not defined
+	exit 1
+fi
+if [ -z "${BUILDGCC_USE_PLAIN_DIR-}" ]
+then
+	if [ -z "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+	then
+		echo BUILDGCC_SPARSEBUNDLE_NAME not defined
+		exit 1
+	fi
+fi
+
+set -uf -o pipefail
+
+		# We don't want a sparsebundle to be create automatically (in case of a user mistake when calling SetupEnv.
+		#echo Sparsebundle $BUILDGCC_SPARSEBUNDLE_NAME doesn\'t exit. Use InitAndBuild to create it.
+
+
+#if it's a case sensitive file system, we don't use sparsebundle, so nothing to
+if [ -z "${BUILDGCC_USE_PLAIN_DIR-}" ]
+then
+
+	# Sparsebundle might not exist ?
+	if [ ! -d "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+	then
+		"$SCRIPT_DIR"/CreateSparseBundle || exit 1
+	fi
+
+	if [ ! -d "$BUILDGCC_SPARSEBUNDLE_NAME" ]
+	then
+		echo Bug in CreateSparseBundle ?
+		exit 1 
+	fi
+
+	# It seems not possible to detect if a mounted sparsebundle has been renamed. Looking at IORegistry (and hdiutil -info), it's still the old name
+	# So, to be sure we have the right sparsebundle mounted, we detach and reattach.
+	#with my is_sparsebundle_mounted_on, renamed while mounted is correctly handled now
+	#umount_sparsebundle "$BUILDGCC_SPARSEBUNDLE_NAME" || exit 1
+
+
+	# Check if directory exists, try to get rid of
+	if [ -d "$BUILDGCC_BUILD_DIR" ]
+	then
+		if is_sparsebundle_mounted_on "$BUILDGCC_SPARSEBUNDLE_NAME" "$BUILDGCC_BUILD_DIR"
+		then
+			:
+			# Ok
+		else
+			
+			# So, if it's a mount point (whatever mounted on it), detach what's mounted on it
+			# I used this before "if grep -q "$BUILDGCC_BUILD_DIR" <<<$(mount)", but there is problem is case of nested mountpoint.
+			# I saw some solution like "df | awk '{print $6}'", but from Yosemite it's ${9}. Not reliable over time.
+			# The known truth is : parsing result of command is almost always a bad idea (except if the command is made for that)
+			# So I quickly wrote is_mountpoint. Feel free to take it and reuse it.
+			if is_mountpoint "$BUILDGCC_BUILD_DIR"
+			then
+				# unmount
+				hdiutil detach "$BUILDGCC_BUILD_DIR" || exit 1
+			fi
+			
+			# Here "$BUILDGCC_BUILD_DIR" isn't a mountpoint anymore.
+			# If directory "$BUILDGCC_BUILD_DIR" exists, it's a user directory or a trace left behind by mount
+			if [ -d "$BUILDGCC_BUILD_DIR" ]
+			then
+				#try to delete the directory
+				rm -f "$BUILDGCC_BUILD_DIR"/.autodiskmounted
+				rm -f "$BUILDGCC_BUILD_DIR"/.DS_Store
+				rmdir "$BUILDGCC_BUILD_DIR" # will fail if not empty
+				if [ -d "$BUILDGCC_BUILD_DIR" ]
+				then
+					echo A directory exists at $BUILDGCC_BUILD_DIR. Please rename or delete and restart the build, or use InitAndBuild.
+					exit 1
+				fi
+			fi
+		fi
+	fi
+	
+	if is_sparsebundle_mounted_on "$BUILDGCC_SPARSEBUNDLE_NAME" "$BUILDGCC_BUILD_DIR"
+	then
+		:
+		# Ok
+	else
+		if is_sparsebundle_mounted_on "$BUILDGCC_SPARSEBUNDLE_NAME"
+		then
+			umount_sparsebundle "$BUILDGCC_SPARSEBUNDLE_NAME" || exit 1
+		fi
+		hdiutil attach -mountpoint "$BUILDGCC_BUILD_DIR" "$BUILDGCC_SPARSEBUNDLE_NAME" || exit 1
+	fi
+
+else
+
+	if [ ! -d "$BUILDGCC_BUILD_DIR" ]
+	then
+		mkdir "$BUILDGCC_BUILD_DIR" || exit 1
+	fi
+
+fi
+touch "$BUILDGCC_BUILD_DIR"/this_is_a_gcc_build_dir.done || exit 1

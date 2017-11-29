@@ -1,0 +1,94 @@
+#!/bin/bash
+SCRIPT_ABS_FILENAME=`perl -e 'use Cwd "abs_path";print abs_path(shift)' "${BASH_SOURCE[0]}"`
+SCRIPT_DIR=`dirname "$SCRIPT_ABS_FILENAME"`
+SCRIPT_NAME=`basename "$SCRIPT_ABS_FILENAME"`
+
+
+#check args
+if [ -z "$BUILDGCC_STARTUP_DIR" ]
+then
+	export BUILDGCC_STARTUP_DIR="$(echo "$(cd "$1" && pwd)")"
+	if [ -z "$BUILDGCC_STARTUP_DIR" ]
+	then
+	  echo "Usage: $SCRIPT_NAME parent_dir build_suffix"
+	  exit 1
+	fi
+else
+	if [  ! -z "$1" ]
+	then
+		echo Parent directory already setup in environnement, just call Build
+		exit 1
+	fi
+fi
+if [ ! -d "$BUILDGCC_STARTUP_DIR" ]
+then
+  echo Directory "$BUILDGCC_STARTUP_DIR" does not exist.
+  echo "Usage: $SCRIPT_NAME parent_dir build_suffix"
+  exit 1
+fi
+
+if [ -z "$BUILDGCC_SUFFIX" ]
+then
+	export BUILDGCC_SUFFIX="$2"
+	if [ -z "$BUILDGCC_SUFFIX" ]
+	then
+	  echo "Usage: $SCRIPT_ABS_FILENAME parent_dir build_suffix"
+	  exit 1
+	fi
+else
+	if [  ! -z "$2" ]
+	then
+		echo Build suffix setup in environnement, just call Build
+		exit 1
+	fi
+fi
+
+if [  -z "$BUILDGCC_BUILD_DIR" ]
+then
+	. "$SCRIPT_DIR"/BuildScripts/SetupEnv
+fi
+
+#check env var
+
+if [ -z "$BUILDGCC_BUILD_DIR" ]
+then
+  echo BUILDGCC_BUILD_DIR not defined
+  exit 1
+fi
+if [ -z "$BUILDGCC_SUFFIX" ]
+then
+  echo BUILDGCC_SUFFIX not defined
+  exit 1
+fi
+
+set -uf -o pipefail
+
+
+
+"$BUILDGCC_SOURCENADTOOLS_DIR"/BuildScripts/MountSparseBundleOrDir || exit 1
+
+if [[ ! -f "$BUILDGCC_BUILD_DIR"/make_sucessfully.done ]]
+then
+	if [[ -e "$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX.log" ]]
+	then
+		log_abs_path="$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX"
+		old="-old"
+		newname="$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX"$old.log
+		if [[ -e "$newname" ]]
+		then
+			i=1
+			newname="$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX"$old"$i".log
+			while [[ -e "$newname" ]] ; do
+				let i++
+				newname="$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX"$old"$i".log
+			done
+		fi
+		echo "$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX.log" is renamed to "$newname"
+		mv -i "$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX.log" "$newname" || exit 1
+	fi
+	
+	{ time "$BUILDGCC_SOURCENADTOOLS_DIR"/BuildScripts/Build-"$BUILDGCC_SUFFIX" ; } 2>&1 | tee -a "$BUILDGCC_BUILD_DIR"/"Build$BUILDGCC_SUFFIX.log"
+else
+	echo Seems all done !
+fi
+	

@@ -1,0 +1,10 @@
+#!/bin/bash
+
+SCRIPT_ABS_FILENAME=`perl -e 'use Cwd "abs_path";print abs_path(shift)' "${BASH_SOURCE[0]}"`
+SCRIPT_DIR=`dirname "$SCRIPT_ABS_FILENAME"`
+
+M4=$SCRIPT_DIR/gm4 \
+ AUTOM4TE=$SCRIPT_DIR/autoconf_brew/autom4te \
+ autom4te_perllibdir=$SCRIPT_DIR/autoconf_brew/share/autoconf \
+ AUTOM4TE_CFG=$SCRIPT_DIR/autoconf_brew/share/autoconf/autom4te.cfg \
+ $SCRIPT_DIR/autoconf_brew/autoconf -I $SCRIPT_DIR/autoconf_brew/share/autoconf $@

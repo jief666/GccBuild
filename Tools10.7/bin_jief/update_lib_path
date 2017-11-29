@@ -1,0 +1,87 @@
+#!/bin/bash
+SCRIPT_ABS_FILENAME=`perl -e 'use Cwd "abs_path";print abs_path(shift)' "${BASH_SOURCE[0]}"`
+SCRIPT_DIR=`dirname "$SCRIPT_ABS_FILENAME"`
+
+
+dryrun=0
+ 
+while getopts ":r" opt; do
+  case $opt in
+    r)
+      dryrun=1
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      ;;
+  esac
+done
+shift $((OPTIND-1))
+
+
+echo '------------> Checking file ' \'"$1"\'
+
+libbasename=`basename "$1"`
+libdirname=`dirname "$1"`
+#echo libdirname=$libdirname
+#echo pwd = `pwd`
+
+
+#cd "$libdirname"
+returnValue=0
+
+while read -r line;
+ do
+  # line would be something like "/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)"
+  #echo line=$line
+  
+  	
+    ex='^(.*) \(.*\)$'
+    if [[ "$line" =~ $ex ]]
+    then
+		#echo lib name \(BASH_REMATCH\)=${BASH_REMATCH[1]}
+		reqlibfullname="${BASH_REMATCH[1]}"
+		reqlibbasename=$(basename "$reqlibfullname")
+		
+		#if it's the id of a dylib
+		if [ "$reqlibbasename" = "$libbasename" ]
+		then
+			#If the id is alredy correct
+			if [ "$reqlibfullname" = "$libbasename" ]
+			then
+				:
+				# do nothing
+			else
+				CMD="install_name_tool -id "$libbasename" "$libdirname"/"$libbasename""
+				if [ $dryrun -eq 1 ]; then
+					echo Must issue cmd : "$CMD"
+				else
+					echo issuing cmd : "$CMD"
+					$CMD
+				fi
+			fi
+		else
+			reqlibnewpath=$("$SCRIPT_DIR"/lib_path "$libdirname" "$reqlibbasename") || exit 1
+			#echo reqlibnewpath=$reqlibnewpath
+			if [ -z "$reqlibnewpath" ]
+			then
+				echo "ERROR ****> Can't find lib "$reqlibbasename" required by $libdirname/$libbasename"
+	        	returnValue=1
+			else
+				newpath="@loader_path"/"$reqlibnewpath"
+				[[ "$reqlibnewpath" == /* ]] && newpath="$reqlibnewpath"
+				if [ "$reqlibfullname" != "$newpath" ]
+				then
+					CMD="install_name_tool -change "$reqlibfullname" "$newpath" "$libdirname"/"$libbasename""
+					if [ $dryrun -eq 1 ]; then
+						echo Must issue cmd : "$CMD"
+					else
+						echo issuing cmd : "$CMD"
+						$CMD
+					fi
+				fi
+			fi
+		fi
+    fi
+done <<< "$(otool -XL "$libdirname"/"$libbasename")"
+
+exit $returnValue
